@@ -1,0 +1,46 @@
+git rm / add
+git remote :	show shortnames of each remote handle you;ve specfiied
+git remote -v :	also shows the url
+
+Adding Remote Repositories
+git remote add <remote machine name> https://github.com/paulboone/ticgit
+
+git remote rm <remote machine name>
+
+git remote rename <old> <new>
+
+git fetch <remote machine name> <branch name>
+	git fetch origin master
+
+git branch -r
+
+git branch -a
+
+
+git checkout -b newBranch origin/master : create new branch
+
+git merge origin/master
+
+git rebase origin/master
+
+git pull <remote machine name> <remote branch name> : <local branch name>
+	git pull origin next:master
+
+git pull origin next 
+	same as git fetch origin 
+		git merge origin/next
+
+git branch --set-upstream master origin/next
+
+git pull origin : local branch merge with one of it's specific branch
+
+git pull : local branch merge with it's only one tracking branch
+
+
+git push <remote machine name> <local branch name>:<remote branch name>
+
+git push origin master : push <local master> to remote <origin> machine
+
+git push origin 
+
+
