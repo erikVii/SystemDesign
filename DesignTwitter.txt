@@ -1,0 +1,140 @@
+I.	1. Ask DAU / MAU 
+	2. Ask wanted service
+		Post a Tweet
+		Timeline
+		News Feed
+		Follow / Unfollow
+		Register / login
+	3. Concurrent User
+		Calculate QPS for Read and Write
+		150M DAU 
+			base	: 150M / 100k * 60 ~= 100k
+			peak	: 3X
+			grow	: 2X
+			
+			Read 	: 600k
+			Write 	: 10k
+	4. QPS cont.
+		100	: laptop
+		1k	: 1 Web Server and single point failure
+		1m	: 1000 Web Servers and maintainance
+	5. QPS cont.
+		Web Server / Database
+		1 Web Server	1k QPS
+		1 SQL		1k QPS
+		1 NoSQL		10k QPS	(Cassandra)
+		1 NoSQL		1M QPS	(memcached)
+
+II.	1. User Service
+	2. Tweet Service
+	3. FriendShip Service
+	4. Media Service
+		
+III. 	1. Database
+		SQL Database	: User Table
+		NoSQL	: Tweets. Followers
+		File System	: Media Files
+
+	2. Schema for DB
+		User Table 		: id, name, email, password
+		Friendship Table 	: id, from_user_id, to_user_id
+		Tweet Table		: id, user_id, content, timestamp, likes
+
+	3. How to read / write New Feeds
+		Pull Model 	
+			News Feed 	: N DB reads + K merge sort
+			Post a tweet 	: 1 DB write
+			
+			User ask web server get all followers from Friendship table, and get all tweets from tweet table then merge them.
+			It will be very slow for the N DB query, and it happens during the get New feeds time
+			
+		Push Model
+			create a list for New Feeds, after user write a tweets, send it to the News feed list, and user take first 100 from the news feed list
+			News feed = 1 DB read
+			Post a tweet = N DB Writes (async) Fanout
+
+			New Feeds Table	: id, owner_id, tweet_id, timestamp (a message pool) (only one table, has one col as owner_id)
+			
+			New Feeds Table is a "replica redundent" of Tweet Table
+
+			SELECT * FROM news_feed_table WHERE owner_id = xxx ORDER_BY created_at DESC LIMIT 20;
+
+		
+		Facebook 	: Pull 
+		Instagram 	: Push + Pull
+		Twitter		: Pull
+
+IV	1. Improve Pull
+		add cache before DB query
+			cache user's timeline (write to DB and also write to cache at the same time)
+				N DB requery -> N Cache requery
+				cache the recent 1000
+
+			cache user's news feed
+				only merge N users after last cached timeline's timestamp
+
+	2. Improve Push
+		push save news feed in disk (cheap)
+		rank down weight for inactive users
+		Pull for super star
+				
+	3. Async Follow and UnFollows
+		Merge timeline into news feed async
+		Pick out tweets in the timeline and drop
+
+	4. Save likes
+		Like table	: id, user_id, tweet_id, createt_id
+			when one person like, add one row in like table.
+
+		De-nomalize 	: (can get value from multiple soucre, however it will be inaacurate)
+				you may do like_num + 1 success, and write the new row in like table failure.
+				you can use transaction, but it is very inefficient.	
+			
+				eventually consistent
+				save a syncronize time in the Tweet table shows when it sync with like table, if it is too late, then re-sync
+	
+	5. Hot spot
+		when the data is not in the cache, use least cache algorthim, avoid dramatic db traffic.	
+
+
+V	Real Tweet
+		https://zhuanlan.zhihu.com/p/22687386		
+
+
+VI	Questions
+		NewsFeed Table		owner_user_id, tweet_id
+						system deliver your tweets to NewFeeds Table in push
+						No new feeds table in pull
+
+		Timeline Table		user_id, tweet id	(somesone's tweet table) 
+						SELECT * FROM tweet_table WHERE user_id = xxx
+		
+		How to sharding NewsFeeds Table
+			sharding on owner_id
+			NewFeeds is good for NoSQL :	row_key = owner_user_id, column_key = post_id, value = postInfo
+
+		One line pull news_feed cmd
+			SELECT id FROM Tweet 
+			WHERE user_id IN (SELECT from_user_id FROM Friendship WHERE to_user_id = TomID)
+			ORDER BY created_at LIMIT DESC 100
+
+			issue : IN is still very slow, your friend info may exist in 100 machines, then IN Query + for = N DB Query 
+				Very heavy load.
+
+		FriendShip Table
+			id: id+1
+			from_user_id 	: me
+			to_user_id   	: yaochen
+
+		How newsfeed achieve pagination
+			cursoring to avoid overlap
+			max_id is the lowest id received, and if inclusive, next page will contain the one same meesage.
+			since_id is the greatest id received, and is exclusive, it will only return tweets with IDs higher than the value passed.
+			
+		Cache
+			every time send a tweet
+				update user's timeline cache
+			every time login
+				pull following's timeline, merge, and update user's newsfeed cache
+
+ 
