@@ -1,0 +1,188 @@
+Dynamo
+	partition and replicate using consistent hashing
+
+	shopping cart
+		3M / day --> 30 QPS and lots of concurrently active sessions
+
+		eventually-consistent storage system is used in production with demanding applications.
+
+		stateless service ( services which aggregate responses from other services)
+		stateful  service ( service that generates it's response by executing business logic on it's state stored on persistent store)
+
+		Traditionally production store state in relational db.
+			dis : not necessary
+			dis : hard to scale
+			dis : skilled operation for designer
+
+		Dynamo
+			ez scale for data size and request rate
+			key/value interface
+
+System assumptions and Requirements
+	query Model	: key - value, no need relational schema. Targets at apps storing small objects (< 1 MB)
+
+	ACID Properties	: Atomicity (transaction) : do not support
+			  Consistency : weak
+			  Isolation : not support
+		 	  Durability
+
+	Efficiency	: Very stringent latency requirements. Tradeoff with performance, cost efficiency, availability, and durability guarantees.
+			  Non-hostile. No security related requiremnets. No authentication / authorization. 
+			  Each service using distinct instance of Dynamo.
+
+Service Level Agreements (SLA)
+	A contract where a client and a service agree on several system-related characteristics (ie. 300ms latency for 99.9% + 500 requests / sec)
+	Don't choose median for customer experience, 99.9% is a tradeoff for cost. 
+	Storage play an important role in establishing a service's SLA, especially when the service is lightweight. Give service option to make their own tradeoffs.
+	
+Design Considerations
+	Strong consistency and high data availability cannot be achieved simultaneously. Tradeoffs.
+	Dynamo is designed as eventually consistent data store 
+		1. when to resolving update conflicts ? 
+			a. conflict resolution during writes and keep the read simple.
+				Writes may be rejected if the data store cannot reach all or majority of the replicas.
+				Read is simple.
+			b. conflict resolution during read.
+				//Dynamo : "always writeable" data store
+				// Rejecting customer updates could result in a poor customer experience.
+				Complicated read.
+	
+		2. who resolves conflicts ?
+			data store : last write wins
+			application also can decide their own conflict resolution.
+
+	Incremental scalability.
+	Symmetry. (all same)
+	Decentralization. (not master-slave)
+	Hetrogeneity. (work need to be distributed evenly)
+
+Related Work
+	Peer to Peer System (flat namespaces)
+		Unstructured P2P networks : overlay links between peers are established arbitrarily.
+					Freenet / Gnutella
+
+		Structured P2P networks : any node can efficiently route a search query to some peer that have data. 
+					O(1) routing tech : Pastry / Chord
+	
+		Not fully understand.
+
+	Distributed File Systems and Database (hierarchical namespaces)
+		Update conflicts are managed using specialized conflict resolution procedures.
+		Farsite system does not use centralized server like NFS
+		GFS : master - slave
+		Bayou : distribted relational DB
+
+	Dynamo : each node maintains enough routing information locally to route a request to the appropriate node directly.
+
+System Architecture
+	Need scalable and robust solutions for : 
+		load balancing 
+		membership and failure detection
+		failure recovery
+		replica synchronization
+		overload handlin
+		state tranfer
+		concurrency and job scheduling
+		request marshalling
+		request routing
+		system monitoring and alarming
+
+	Partitioning				Consistent Hashing	Incremental Scalability
+	Availabilty Writes			???			???
+	temporary failure	
+	Recovering permanent failure
+	Membership and failure detection  
+
+	System Interface
+		get() put() key value 
+		MD5 hash
+
+	Partitioning Algorithm
+		Virtual node consistent hashing
+
+	Replication
+		N - 1 successor nodes in the ring
+
+	Data Verioning
+		Eventually consistent
+		Updates to be propagated to all replicas asynchronously
+			With no failure, get() may return an object that does not have the latest update
+			Under certain failures (server outages), updates may not arrive at all replicas for an extend period of time.
+	
+			A category of applicagtions can tolerate inconsistencies.
+
+		Dynamo treats the result of each modification as a new and immutable version of the data. 
+		Allows multiple versions of an object to be present in the system.
+		System decide how to merge different versions of the object
+
+		Dynamo using vector clocks to capture causality between different versions of the same object 
+
+	Execution of get() and put() operations
+		infrastructure-specific request processing framework
+		1. route its request through a generic load balancer select node based on load info (simple to client) 	
+		2. using a partition-aware client library that routes requests directly to the appropriate coordinator nodes (fast)
+
+		Consistency (very clever) 
+		A node handling a read and write is known as cooridnator
+		consistency protocol similar to quorum system.
+		N -- the preference list length (how much replica you set for one data copy) 
+			if the node not in the top N, it will forward to the first among this list
+		R -- min number of nodes must participate in a successful read.
+		W -- min number of nodes must participate in a successful write.
+
+		R + W > N (guarantee read at least have a up-to-date W)
+		W > N / 2 (when write, have to write to N/2 to guarantee read) !!!	
+	
+		put() coordinator write data locally, it send the new version to the N highest-ranked node, and as long as W 0 1 nodes respond --> success
+		get() coordinator request data from N highest-ranked node, and wait for R response to send back the data to client. 
+				If get multiple version of data, it return all versions and reconciled then send buck a put() for the reconciled version.
+
+	Handling Failures : Hinted Handoff
+		read and write op are on the first N healthy nodes from the preference list, instead of the first N node in the consistent hash ring.
+		
+		when A dead temporarily. the write to A will temporarily become write to D. D will keep data in a separate local db and scanned periodically.
+		The replica send to D will have a hint says node should be send to A. After A wake up, D will deliver data to A and delete local copy.
+
+		Dynamo's replica is crossing data center.
+
+	Handling permanent failures: Replica synchronization.
+		Replica Synchronization Protocal 
+		Using Merkle trees to check data consistency, each key is a leaf node's value in the Merkle tree of one node.
+		(simliar to compare in segment tree)
+
+	Membership and Failure Detection
+		Local notion of failure detection.
+		Decentralized failure detection protocols use gossip-based protocol to enable each node in the system to learn "arrive" / "departure" of node.
+
+	Adding / Removing Storage Nodes
+		Consider duplicate condition in consistent hashing.
+
+Implementation
+	request coordination, membership and failure detection, and a local persistence engine.
+	xxxxxx
+
+Experiences & Lessons learned
+	Typical : N R W : 3, 2, 2
+	W / R / N can be tuned by client
+	N : durability of each object
+	RW is tradeoff between availability, durability and consistency
+
+Balancing Performance and Durability
+	Object buffer in main memory.
+	Write store in the buffer and periodically written to storage by write thread.
+	Read check if the request in the buffer then check the storage engine if miss.
+
+	"Averaging method to reduce peak"
+	To avoid data miss in the read buffer
+		N = 2, R = 2
+
+Ensuring Uniform Load Distribution
+	
+Client-driven or Server-driven Coordination
+
+
+
+	
+	 
+
+
