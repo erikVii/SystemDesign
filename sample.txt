@@ -1,0 +1,24 @@
+public interface ITeamService {
+    List<Employee> getDirects(Employee emp);
+}
+
+public class Employee {
+    public string Name;
+    public Guid id;
+    public Employee Manager;
+    public bool isMentor;
+    private ITeamService teamService;
+    
+    public static List<Employee> getAllMentorsUnder(Employee manager) {
+        List<Employee> allMentors;
+        if(manager.isMentor) {
+            allMentors.add(manager);
+        }
+        foreach(var direct in this.teamService.getDirects(nanager)) {
+            allMentors.AddRange(getAllMentorsUnder(direct));
+        }
+        return allMentors;
+    }
+
+    public List<Employee>
+}

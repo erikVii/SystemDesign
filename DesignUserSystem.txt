@@ -1,0 +1,38 @@
+Design User System
+	Authentication Service
+		Session Table :	session_key, user_id, expire_at
+
+	After user login, create a session, send session_key as cookie to brower, every time when user send query to web server, it will include the cookie
+
+	Cache Aside (FaceBook)
+		DB do not direct talk to cache.
+		Memcached + MySQL 
+		read 	: get k from memcache, if miss get value from db than set(k, v)
+		write 	: update db, delete k in memcache
+
+	Cache Through
+		Web server only talk to cache.
+		Web server + Redis.
+
+	FriendShip Service
+		Friendship Table : from_user_id, to_user_id (save in graph db)
+
+	Cassandra NoSQL DB
+		row_key, column_key, value
+
+	Single Point Failure
+		AWS Dynamo : 750 RCU, 750 WCU
+
+		Sharding / Replica 
+
+	consistent hashing
+	
+	Replica
+		Master + Slave
+			Write Ahead Log
+
+	NoSQL : Adv : 	Scalability
+		Dis : 	Query language
+			Secondary index
+			ACID transactions
+			Trust and confidence		  
