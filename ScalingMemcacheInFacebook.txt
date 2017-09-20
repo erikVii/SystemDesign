@@ -1,0 +1,64 @@
+1. Data Processing
+	build a DAG for the data dependency
+	put non-relationship data as a batch and send request
+	
+
+2. Comunication
+	memcached servers do not talk to each others
+	client (can be a part of webs erver) give the key to user and let them access the memcached server (routing)
+	client talk to memcached server
+		stateless client 
+		use UDP for get, if failure, treat as cache miss
+		use TCP for update / delete for safety
+		
+		incast congestion
+			if all the requests arrives the cluster switches, 
+			set proper window size as trade off 
+
+3. Reduce Load
+	Lease
+		when client request sees a cache miss, memcached server give client a token to set data back to the cache.
+		memcached check the token and decide whether the data should be stored
+
+		thundering herd problem
+		10ms for a token for a same key, when the first client set back data to cache, others can get data from cache instead of doing db query.
+
+	Stale values
+		recent delete data save as key-value pairs in a place holds recent deleted items.
+		if app can tolerent recent data. a get request can return a lease token or a data marked as stale.
+
+4. Memcache pools
+	Different type of memcached pools
+		low-churn vs high-churn : some key are very stable week by week, some are change very frequently. Need to seperate them to reduce cache missing rate 
+
+	Within same pool Replica
+		1. app fetches many keys simutaniously
+		2. the entire data set hits one / two memcached server
+		3. the request rate is much higher then single server can manage
+
+		the memcached server overhead for retriving 100 keys of 1 request and 10 keys of 1 request is small
+		if we only split the data to different memcached servers. Let's say 1 server to 2 servers, and one server can handle 500k / s requests.
+		if 1M / s requests
+		w/o replica	: A 100 keys request per server become 2 x 50 keys requests per server, and it means 1M / s requests
+		w/ replica	: A 100 keys request all send to one specific server, and traffic becomes 1M / (s * NumOfReplica) requests
+
+5. Handle Failure
+	failure in fetching data from memcache server resulting in cascading failures for backend service.
+		1. a small part of host offline
+		2. a large percent of servers in a cluster
+
+	A gutter pool (A memcahce pool specific for host failure, 1% of total memcache server) 
+		when host don't response, client get data from db and put into gutter pool as key-value pair
+
+	reduce client visable failure by 99%, and convert 15% - 20% miss to hit.
+
+6. Region
+	web servers + memcache servers = frontEnd cluster
+	frontEnd clusters + storage cluster = region
+
+	frontEnd cluster can not grow continuesly due to N * N connection.
+
+	Region Invalidation
+		when one server in a cluster change data in storage cluster, how to let other frontEnd cluster know and update their caches
+
+to be continued... 
